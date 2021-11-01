@@ -1,0 +1,110 @@
+---
+Parameters:
+  KeyName:
+      Description: Name of an existing EC2 key pair for SSH access to the EC2 instance
+      Type: 'AWS::EC2::KeyPair::KeyName'
+  
+  SubnetEC2:
+      Description: Select subnet for EC2
+      Type: AWS::EC2::Subnet::Id
+      Default: 10.0.1.0/24
+  
+  VPC:
+      Description: VPC to create the security group into
+      Type: AWS::EC2::VPC::Id
+
+Mappings: 
+  RegionMap: 
+    us-east-1:
+      Linux: ami-02e136e904f3da870
+      Windows: ami-0416f96ae3d1a3f29
+    us-east-2:
+      Linux: ami-0bd804c6ae66f0dcd
+      Windows: ami-058b12f51d412b5db
+    us-west-1:
+      Linux: ami-03ab7423a204da002
+      Windows: ami-0cf4a2d03d1a3d62c
+    # ap-south-1:
+    #   Linux: ami-0c03e9eaad27ad6c0
+    #   Windows: ami-0e7d76dfc4fac48d6
+    # ap-northeast-3:
+    #   Linux: ami-0791d2e614355a9eb
+    #   Windows: ami-0ce3798fb9f5c9883
+    # ap-northeast-3:
+    #   Linux: ami-0e4a9ad2eb120e054
+    #   Windows: ami-081e530f100d962be
+    # ap-southeast-1:
+    #     Linux: ami-073998ba87e205747
+    #     Windows: ami-0bd2beaddfd6419fc
+    # ap-southeast-2:
+    #   Linux: ami-05c029a4b57edda9e
+    #   Windows: ami-00803a3c61ac12ee2
+    # ap-northeast-1:
+    #   Linux: ami-0701e21c502689c31
+    #   Windows: ami-0890484998c6a6e77
+    # ca-central:
+    #   Linux: ami-0a70476e631caa6d3
+    #   indows: ami-04ce2d3d06e88b4cf
+    # eu-central-1:
+    #   Linux: ami-058e6df85cfc7760b
+    #   Windows: ami-06e9b42a08895adf6
+    # eu-west-1:
+    #     Linux: ami-05cd35b907b4ffe77
+    #     Windows: ami-06938675032090695
+    # eu-west-2:
+    #     Linux: ami-02f5781cba46a5e8a
+    #     Windows: ami-0f9853ca76d115e7b
+    # eu-west-3:
+    #     Linux: ami-0eb34a1ff6bafc83f
+    #     Windows: ami-0c9ff4cc1d0291f62
+    eu-north-1: 
+        Linux: ami-0d15082500b576303
+        Windows: ami-07bce40826a463d1c
+    # sa-east-1:
+    #   Linux: ami-05855ed85de7fbd77
+    #   Windows: ami-06ab8fe950abb04f5
+
+Resources:
+  MyInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      AvailabilityZone: !Select 
+          - 0
+          - Fn::GetAZs: !Ref 'AWS::Region'
+      SubnetId: !Ref SubnetEC2
+      ImageId: !FindInMap [RegionMap, !Ref "AWS::Region", Linux]
+      InstanceType: t2.micro
+      KeyName: !Ref KeyName
+      SecurityGroups:
+        - !Ref SSHSecurityGroup
+      Tags:
+            - Key: Name
+              Value: !Join
+              - ""
+              - - "EC2 Instance for"
+                - !Ref AWS::Region
+      # we install our web server with user data               
+      UserData: 
+        Fn::Base64: |
+          #!/bin/bash -xe
+          yum update -y
+          yum install -y httpd
+          systemctl start httpd
+          systemctl enable httpd
+          echo "Hello World from user data" > /var/www/html/index.html
+
+  # our EC2 security group
+  SSHSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: SSH and HTTP
+      SecurityGroupIngress:
+      - CidrIp: 0.0.0.0/0
+        FromPort: 22
+        IpProtocol: tcp
+        ToPort: 22
+      - CidrIp: 0.0.0.0/0
+        FromPort: 80
+        IpProtocol: tcp
+        ToPort: 80
+      VpcId: !Ref VPC
