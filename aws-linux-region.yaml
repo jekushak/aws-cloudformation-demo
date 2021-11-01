@@ -1,0 +1,329 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: A CF-Template is used to deploy the application server together with a ALB in front of it. The current Cf-Template needs to be updated and generalized in order to be used in every region.
+
+#########################
+#      Parameters       #
+#########################
+
+Parameters:
+  VPC:
+      Description: VPC to create the security group into
+      Type: AWS::EC2::VPC::Id
+
+  InstanceType:
+      Description: Select instance type for EC2
+      Type: String
+      Default: t2.micro
+      AllowedValues: [t2.nano, t2.micro, t2.small, t2.medium, t2.large, t2.xlarge, t2.2xlarge, t3.nano, t3.micro, t3.small, t3.medium, t3.large, t3.xlarge, t3.2xlarge,
+          m4.large, m4.xlarge, m4.2xlarge, m4.4xlarge, m4.10xlarge, m5.large, m5.xlarge, m5.2xlarge, m5.4xlarge, c5.large, c5.xlarge, c5.2xlarge, c5.4xlarge, c5.9xlarge,
+          g3.8xlarge, r5.large, r5.xlarge, r5.2xlarge, r5.4xlarge, r3.12xlarge, i3.xlarge, i3.2xlarge, i3.4xlarge, i3.8xlarge, d2.xlarge, d2.2xlarge, d2.4xlarge, d2.8xlarge]
+      ConstraintDescription: must be a valid EC2 instance type.
+
+  SubnetEC2:
+      Description: Select subnet for EC2
+      Type: AWS::EC2::Subnet::Id
+      Default: 10.0.1.0/24
+
+  KeyName:
+      Description: Name of an existing EC2 key pair for SSH access
+      Type: 'AWS::EC2::KeyPair::KeyName'
+    
+  # CIDRSSH:
+  #   Type: AWS::EC2::SecurityGroup::Id
+  #   Default: "0.0.0.0/0"
+
+  CIDRHTTP:
+    Type: String
+    Default: "0.0.0.0/0"
+    
+  SecurityGroupDescription:
+      Description: Security Group Description
+      Type: String 
+     
+  ALBSubnetIDs: 
+      Description: Subnet IDs for ALB
+      Type: "List<AWS::EC2::Subnet::Id>"
+  
+  MyALBName:
+    Type: String
+    Default: shared-learning
+
+  CIDRInternetALB:
+    Description: Select subnets for ALB
+    Type: String
+    Default: "0.0.0.0/0"
+      
+#   AcmCertificate:
+#     Description: This ARN of the AWS Certification Managers Certificat
+#     Type: String
+
+
+#########################
+#      Mapping          #
+#########################
+      
+Mappings: 
+  RegionMap: 
+    us-east-1:
+      Linux: ami-02e136e904f3da870
+      Windows: ami-0416f96ae3d1a3f29
+    us-east-2:
+      Linux: ami-0bd804c6ae66f0dcd
+      Windows: ami-058b12f51d412b5db
+    us-west-1:
+      Linux: ami-03ab7423a204da002
+      Windows: ami-0cf4a2d03d1a3d62c
+    # ap-south-1:
+    #   Linux: ami-0c03e9eaad27ad6c0
+    #   Windows: ami-0e7d76dfc4fac48d6
+    # ap-northeast-3:
+    #   Linux: ami-0791d2e614355a9eb
+    #   Windows: ami-0ce3798fb9f5c9883
+    # ap-northeast-3:
+    #   Linux: ami-0e4a9ad2eb120e054
+    #   Windows: ami-081e530f100d962be
+    # ap-southeast-1:
+    #     Linux: ami-073998ba87e205747
+    #     Windows: ami-0bd2beaddfd6419fc
+    # ap-southeast-2:
+    #   Linux: ami-05c029a4b57edda9e
+    #   Windows: ami-00803a3c61ac12ee2
+    # ap-northeast-1:
+    #   Linux: ami-0701e21c502689c31
+    #   Windows: ami-0890484998c6a6e77
+    # ca-central:
+    #   Linux: ami-0a70476e631caa6d3
+    #   indows: ami-04ce2d3d06e88b4cf
+    # eu-central-1:
+    #   Linux: ami-058e6df85cfc7760b
+    #   Windows: ami-06e9b42a08895adf6
+    # eu-west-1:
+    #     Linux: ami-05cd35b907b4ffe77
+    #     Windows: ami-06938675032090695
+    # eu-west-2:
+    #     Linux: ami-02f5781cba46a5e8a
+    #     Windows: ami-0f9853ca76d115e7b
+    # eu-west-3:
+    #     Linux: ami-0eb34a1ff6bafc83f
+    #     Windows: ami-0c9ff4cc1d0291f62
+    # eu-north-1: 
+    #     Linux: ami-0d15082500b576303
+    #     Windows: ami-07bce40826a463d1c
+    # sa-east-1:
+    #   Linux: ami-05855ed85de7fbd77
+    #   Windows: ami-06ab8fe950abb04f5
+
+#   AZRegions:
+#     ap-northeast-1:
+#       AZs: ["a", "b"]
+#     ap-northeast-2:
+#       AZs: ["a", "b"]
+#     ap-south-1:
+#       AZs: ["a", "b"]
+#     ap-southeast-1:
+#       AZs: ["a", "b"]
+#     ap-southeast-2:
+#       AZs: ["a", "b"]
+#     ca-central-1:
+#       AZs: ["a", "b"]
+#     eu-central-1:
+#       AZs: ["a", "b"]
+#     eu-west-1:
+#       AZs: ["a", "b"]
+#     eu-west-2:
+#       AZs: ["a", "b"]
+#     sa-east-1:
+#       AZs: ["a", "b"]
+#     us-east-1:
+#       AZs: ["a", "b"]
+#     us-east-2:
+#       AZs: ["a", "b"]
+#     us-west-1:
+#       AZs: ["a", "b"]
+#     us-west-2:
+#       AZs: ["a", "b"] 
+
+#########################
+#      Resources        #
+#########################
+
+Resources:
+
+# Create an EC2 Instance EC2
+    MyEC2Instance:
+        Type: 'AWS::EC2::Instance'
+        Properties:
+          InstanceType: !Ref InstanceType
+        #   AvailabilityZone:
+        #   Fn::Sub:
+        #     - "${AWS::Region}${AZ}"
+        #     - AZ: !Select [ 0, !FindInMap [ "AZRegions", !Ref "AWS::Region", "AZs" ] ]
+          AvailabilityZone: !Select 
+             - 0
+             - Fn::GetAZs: !Ref 'AWS::Region'
+          SubnetId: !Ref SubnetEC2
+          KeyName: !Ref KeyName
+          ImageId: !FindInMap [RegionMap, !Ref "AWS::Region", Linux]
+          SecurityGroupIds: 
+            - Ref: SSHSecurityGroup  
+          Tags:
+            - Key: Name
+              Value: !Join
+              - ""
+              - - "EC2 Instance for"
+                - !Ref AWS::Region
+# Install 
+          UserData: 
+            Fn::Base64:
+              #!/bin/bash -xe
+              yum update -y
+              yum install -y httpd
+              systemctl start httpd
+              systemctl enable httpd
+              echo "Healthy" > /var/www/html/index.html
+              service httpd start
+              /opt/aws/bin/cfn-signal \
+                -e $? \
+                --stack ${AWS::StackName} \
+                --resource MyEC2Instance \
+                --region ${AWS::Region}
+# an elastic IP for our instance
+    MyEIP:
+        Type: AWS::EC2::EIP
+        Properties:
+          InstanceId: !Ref MyEC2Instance
+
+# Create an Volume EC2              
+    NewVolume:
+          Type: AWS::EC2::Volume
+          Properties:
+            Size: 10
+            VolumeType: gp2
+            AvailabilityZone: !GetAtt MyEC2Instance.AvailabilityZone
+            Tags:
+              - Key: Name
+                Value: GitLabEBS
+          DeletionPolicy: Snapshot
+
+    EBSVolume:
+          Type: AWS::EC2::VolumeAttachment
+          Properties:
+            InstanceId: !Ref MyEC2Instance
+            VolumeId: !Ref NewVolume
+            Device: /dev/sdh
+
+#Create an Security Group for EC2
+    SSHSecurityGroup:
+          Type: "AWS::EC2::SecurityGroup"
+          Properties:
+            GroupDescription: Allow SSH access via port 22 from ALB Security Group
+            SecurityGroupIngress:
+              - CidrIp: 0.0.0.0/0 #!Ref CIDRSSH
+                FromPort: 22
+                ToPort: 22
+                IpProtocol: tcp
+            VpcId: !Ref VPC
+
+    # WebServerCriticalSecGroup:
+    #     Type: AWS::EC2::SecurityGroup
+    #     Properties:
+    #       GroupDescription: Allow HTTP access via port 22 from Internet
+    #       SecurityGroupIngress:
+    #         - IpProtocol: tcp
+    #           FromPort: 80
+    #           ToPort: 80
+    #           CidrIp: !Ref CIDRHTTP 
+    #       SecurityGroupEgress:
+    #         - IpProtocol: tcp
+    #           FromPort: 0
+    #           ToPort: 65535
+    #           CidrIp: 0.0.0.0/0
+    #       VpcId: !Ref VPC
+
+#Create an Application Load Balancer 
+
+    GitlabLoadbalancer:
+        Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+        Properties:
+          Subnets: !Ref ALBSubnetIDs
+          IpAddressType: ipv4
+          Name: !Sub  'alb-${MyALBName}'
+          Scheme: internet-facing
+          SecurityGroups: 
+            - Ref: GitLoadbalancerSecurityGroup
+          Type: application
+
+#Create an Security Group for ALB    
+    GitLoadbalancerSecurityGroup:
+        Type: "AWS::EC2::SecurityGroup"
+        Properties:
+          GroupDescription: !Ref SecurityGroupDescription
+          SecurityGroupIngress:
+            - IpProtocol: tcp
+              FromPort: 80
+              ToPort: 80
+              CidrIp: 0.0.0.0/0 #!Ref CIDRInternetALB
+            - IpProtocol: tcp
+              FromPort: 443
+              ToPort: 443
+              CidrIp: 0.0.0.0/0 #!Ref CIDRInternetALB
+          VpcId: !Ref VPC
+
+# Create a Target Group 
+
+    GitlabTarget:
+        Type: AWS::ElasticLoadBalancingV2::TargetGroup
+        Properties: 
+          HealthCheckEnabled: true
+          HealthCheckIntervalSeconds: 10
+          HealthCheckPath: /
+          HealthCheckPort: 80
+          HealthCheckProtocol: HTTP
+          HealthCheckTimeoutSeconds: 5
+          HealthyThresholdCount: 2
+          Name: GitlabTarget
+          Port: 80
+          Protocol: HTTP
+          ProtocolVersion: "HTTP1"
+        #   Targets: 
+        #   - Id: !Ref EC2Id
+          TargetType: "instance"
+          UnhealthyThresholdCount: 2
+          Targets: 
+            - Id: !Ref MyEC2Instance
+          VpcId: !Ref VPC
+
+# Create a Listener on Port 80 
+
+    GitlabListenerHTTP:
+        Type: AWS::ElasticLoadBalancingV2::Listener
+        Properties: 
+          DefaultActions: 
+            - Type: "forward"
+              TargetGroupArn: !Ref GitlabTarget
+          LoadBalancerArn: !Ref GitlabLoadbalancer
+          Port: 80
+          Protocol: 'HTTP'
+
+#Create a Listener on Port 443
+#   GitlabListenerHTTPS:
+#     Type: AWS::ElasticLoadBalancingV2::Listener
+#     Properties: 
+#     #   Certificates: 
+#     #     - CertificateArn: !Ref AcmCertificate
+#       DefaultActions: 
+#         - Type: "forward"
+#           TargetGroupArn: !Ref GitlabTarget
+#       LoadBalancerArn: !Ref GitlabLoadbalancer
+#       Port: 443
+#       Protocol: HTTPS
+
+#########################
+#      Outputs        #
+#########################
+
+Outputs:
+  ALBName:
+    Value: !GetAtt 'GitlabLoadbalancer.LoadBalancerName'
+    Description: 'Unique load balancer name'
+
